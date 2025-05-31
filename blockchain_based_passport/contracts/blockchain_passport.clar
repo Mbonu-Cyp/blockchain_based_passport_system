@@ -42,3 +42,65 @@
     (string-utf8 32)
     bool
 )
+
+;; Read-only functions
+(define-read-only (get-passport (passport-id (string-utf8 32)))
+    (map-get? Passports {passport-id: passport-id})
+)
+
+(define-read-only (get-holder-passport (holder principal))
+    (map-get? HolderPassports holder)
+)
+
+(define-read-only (is-valid-passport? (passport-id (string-utf8 32)))
+    (match (map-get? Passports {passport-id: passport-id})
+        passport (and 
+            (get is-valid passport)
+            (> (get expiry-date passport) block-height)
+        )
+        false
+    )
+)
+
+(define-read-only (is-authority (address principal))
+    (match (map-get? PassportAuthorities address)
+        authority (get active authority)
+        false
+    )
+)
+
+;; Public functions
+
+(define-public (add-authority (authority-address principal) (authority-name (string-utf8 100)))
+    (begin
+        (asserts! (is-eq tx-sender contract-owner) err-unauthorized)
+        (asserts! (is-none (map-get? PassportAuthorities authority-address)) err-already-exists)
+        
+        (map-set PassportAuthorities
+            authority-address
+            {
+                name: authority-name,
+                active: true,
+                authorized-since: block-height
+            }
+        )
+        (ok true)
+    )
+)
+
+(define-public (remove-authority (authority-address principal))
+    (begin
+        (asserts! (is-eq tx-sender contract-owner) err-unauthorized)
+        (asserts! (is-some (map-get? PassportAuthorities authority-address)) err-not-found)
+        
+        (map-set PassportAuthorities
+            authority-address
+            {
+                name: (get name (unwrap-panic (map-get? PassportAuthorities authority-address))),
+                active: false,
+                authorized-since: (get authorized-since (unwrap-panic (map-get? PassportAuthorities authority-address)))
+            }
+        )
+        (ok true)
+    )
+)
